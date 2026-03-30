@@ -1,0 +1,25 @@
+# Project root
+config*.yaml
+venv/
+__pycache__/
+*.pyc
+.DS_Store
+.env
+*.log
+/opt/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.AppleDouble
+.LSOverride
+Thumbs.db
+
+# Logs
+*.log
+logs/

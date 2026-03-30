@@ -1,0 +1,33 @@
+[Unit]
+Description=LED Bike Wall Lights Controller
+Documentation=file:///opt/led_bike_lights/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/opt/led_bike_lights
+Environment="PATH=/opt/led_bike_lights/venv/bin"
+ExecStart=/opt/led_bike_lights/venv/bin/python3 /opt/led_bike_lights/app.py
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Restart policy
+Restart=on-failure
+RestartSec=5
+
+# Hardening
+PrivateTmp=yes
+NoNewPrivileges=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=led-bike-lights
+
+# Process limits
+LimitNOFILE=1024
+
+[Install]
+WantedBy=multi-user.target
