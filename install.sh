@@ -35,7 +35,6 @@ apt-get install -y \
   python3 python3-pip python3-venv \
   git curl wget \
   gcc python3-dev \
-  libatlas-base-dev \
   network-manager \
   || { echo -e "${RED}Failed to install system packages${NC}"; exit 1; }
 
