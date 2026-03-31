@@ -22,9 +22,27 @@ from input.buttons import ButtonService, ButtonEvent
 from network.wifi import WiFiService
 from web.server import WebServer
 
+
+def _resolve_log_dir():
+    """Return a writable log directory for the current runtime user."""
+    candidates = [
+        Path("/var/log/led_bike_lights"),
+        Path("/opt/led_bike_lights/logs"),
+        Path("/tmp/led_bike_lights"),
+    ]
+    for candidate in candidates:
+        try:
+            candidate.mkdir(exist_ok=True, parents=True)
+            return candidate
+        except PermissionError:
+            continue
+        except Exception:
+            continue
+    return None
+
+
 # Setup logging to file and console
-log_dir = Path("/var/log/led_bike_lights")
-log_dir.mkdir(exist_ok=True, parents=True)
+log_dir = _resolve_log_dir()
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -39,20 +57,24 @@ console.setFormatter(console_format)
 logger.addHandler(console)
 
 # File handler
-try:
-    file_handler = logging.handlers.RotatingFileHandler(
-        log_dir / "app.log",
-        maxBytes=1024*1024,
-        backupCount=3
-    )
-    file_handler.setLevel(logging.DEBUG)
-    file_format = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
-    file_handler.setFormatter(file_format)
-    logger.addHandler(file_handler)
-except Exception as e:
-    logger.warning(f"Could not set up file logging: {e}")
+if log_dir is not None:
+    try:
+        file_handler = logging.handlers.RotatingFileHandler(
+            log_dir / "app.log",
+            maxBytes=1024*1024,
+            backupCount=3
+        )
+        file_handler.setLevel(logging.DEBUG)
+        file_format = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+        )
+        file_handler.setFormatter(file_format)
+        logger.addHandler(file_handler)
+        logger.info(f"File logging enabled at: {log_dir}")
+    except Exception as e:
+        logger.warning(f"Could not set up file logging: {e}")
+else:
+    logger.warning("No writable log directory found; using console/journal logging only")
 
 
 class ModeController:
