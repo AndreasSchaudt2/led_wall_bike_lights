@@ -119,15 +119,31 @@ if ! grep -q "^dtparam=audio=off" "$BOOT_CONFIG" 2>/dev/null; then
   echo "# Disable onboard audio to free PWM for WS281x LEDs" >> "$BOOT_CONFIG"
 fi
 
-# Allow GPIO access — also add the actual logged-in user if different from 'pi'
-SUDO_USER_HOME=$(getent passwd "${SUDO_USER:-pi}" | cut -d: -f6)
-ACTUAL_USER="${SUDO_USER:-pi}"
+# Determine the runtime user for service ownership and execution.
+# Priority: sudo invoker -> pi -> ppi -> first normal user.
+ACTUAL_USER="${SUDO_USER:-}"
+if [ -z "$ACTUAL_USER" ] || ! id "$ACTUAL_USER" >/dev/null 2>&1; then
+  if id pi >/dev/null 2>&1; then
+    ACTUAL_USER="pi"
+  elif id ppi >/dev/null 2>&1; then
+    ACTUAL_USER="ppi"
+  else
+    ACTUAL_USER="$(awk -F: '$3 >= 1000 && $3 < 65534 {print $1; exit}' /etc/passwd)"
+  fi
+fi
+
+if [ -z "$ACTUAL_USER" ] || ! id "$ACTUAL_USER" >/dev/null 2>&1; then
+  echo -e "${RED}Error: could not determine a valid non-root runtime user${NC}"
+  exit 1
+fi
+
+echo "Using runtime user: $ACTUAL_USER"
 for grp in gpio spi i2c; do
   getent group "$grp" &>/dev/null && usermod -aG "$grp" "$ACTUAL_USER" || true
 done
 
 echo -e "${YELLOW}[6/8] Installing systemd service...${NC}"
-cat > /etc/systemd/system/led-bike-lights.service <<'EOF'
+cat > /etc/systemd/system/led-bike-lights.service <<EOF
 [Unit]
 Description=LED Bike Wall Lights Controller
 After=network-online.target
@@ -135,7 +151,8 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
+User=$ACTUAL_USER
+Group=$ACTUAL_USER
 WorkingDirectory=/opt/led_bike_lights
 Environment="PATH=/opt/led_bike_lights/venv/bin"
 ExecStart=/opt/led_bike_lights/venv/bin/python3 /opt/led_bike_lights/src/app.py

@@ -6,11 +6,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-Group=pi
 WorkingDirectory=/opt/led_bike_lights
 Environment="PATH=/opt/led_bike_lights/venv/bin"
-ExecStart=/opt/led_bike_lights/venv/bin/python3 /opt/led_bike_lights/app.py
+ExecStart=/opt/led_bike_lights/venv/bin/python3 /opt/led_bike_lights/src/app.py
 ExecReload=/bin/kill -HUP $MAINPID
 
 # Restart policy
