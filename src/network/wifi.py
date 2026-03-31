@@ -40,19 +40,21 @@ class WiFiService:
             
             # Create AP connection profile
             cmd = [
-                "sudo", "nmcli", "con", "add", "type", "wifi", "ifname", "wlan0",
+                "nmcli", "con", "add", "type", "wifi", "ifname", "wlan0",
                 "con-name", "BikeLights-AP", "autoconnect", "no",
                 "ssid", self.ap_ssid
             ]
             subprocess.run(cmd, check=True, capture_output=True)
             
             # Set to AP mode
-            cmd = ["sudo", "nmcli", "con", "modify", "BikeLights-AP", 
-                   "802-11-wireless.mode", "ap"]
+            cmd = [
+                "nmcli", "con", "modify", "BikeLights-AP",
+                "802-11-wireless.mode", "ap"
+            ]
             subprocess.run(cmd, check=True, capture_output=True)
             
             # Activate AP
-            cmd = ["sudo", "nmcli", "con", "up", "BikeLights-AP"]
+            cmd = ["nmcli", "con", "up", "BikeLights-AP"]
             subprocess.run(cmd, check=True, capture_output=True)
             
             self.is_ap_mode = True
@@ -77,11 +79,11 @@ class WiFiService:
             logger.info("Exiting AP mode")
             
             # Disconnect AP
-            cmd = ["sudo", "nmcli", "con", "down", "BikeLights-AP"]
+            cmd = ["nmcli", "con", "down", "BikeLights-AP"]
             subprocess.run(cmd, capture_output=True)
             
             # Remove AP connection
-            cmd = ["sudo", "nmcli", "con", "delete", "BikeLights-AP"]
+            cmd = ["nmcli", "con", "delete", "BikeLights-AP"]
             subprocess.run(cmd, capture_output=True)
             
             self.is_ap_mode = False
@@ -108,7 +110,7 @@ class WiFiService:
             
             # Create connection
             cmd = [
-                "sudo", "nmcli", "dev", "wifi", "connect", ssid,
+                "nmcli", "dev", "wifi", "connect", ssid,
                 "password", password
             ]
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -193,7 +195,7 @@ class WiFiService:
         """
         try:
             logger.info("Disconnecting from network")
-            cmd = ["sudo", "nmcli", "device", "disconnect", "wlan0"]
+            cmd = ["nmcli", "device", "disconnect", "wlan0"]
             subprocess.run(cmd, check=True, capture_output=True)
             return True
         
