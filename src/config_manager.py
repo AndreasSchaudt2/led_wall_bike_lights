@@ -158,6 +158,12 @@ class ConfigManager:
         Returns:
             Config value or default
         """
+        # Backward compatibility with dict-style call pattern:
+        # get('section', default) where the second argument is not a key.
+        if key is not None and default is None and not isinstance(key, str):
+            default = key
+            key = None
+
         if section not in self.config:
             return default
         

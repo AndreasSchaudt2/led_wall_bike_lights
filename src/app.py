@@ -96,7 +96,7 @@ class ModeController:
         self.stop_animation = False
         
         # Get list of available modes
-        modes_config = config.get('modes', {})
+        modes_config = config.get('modes', default={})
         self.available_modes = [m for m in modes_config.keys() if m != 'startup_mode']
         self.mode_index = 0
         
@@ -104,7 +104,7 @@ class ModeController:
     
     def startup(self):
         """Activate startup mode from config."""
-        startup_mode = self.config.get('modes', {}).get('startup_mode', 'static')
+        startup_mode = self.config.get('modes', default={}).get('startup_mode', 'static')
         self.set_mode(startup_mode)
     
     def set_mode(self, mode_name):
@@ -125,7 +125,7 @@ class ModeController:
             self.animation_thread.join(timeout=1)
         
         # Create new mode
-        mode_config = self.config.get('modes', {}).get(mode_name, {})
+        mode_config = self.config.get('modes', default={}).get(mode_name, {})
         self.current_mode_obj = create_mode(mode_name, self.led_engine, mode_config)
         self.current_mode = mode_name
         
@@ -204,7 +204,7 @@ class Application:
         logger.info("Configuration loaded and validated")
         
         # Initialize LED engine
-        led_cfg = self.config.get('led', {})
+        led_cfg = self.config.get('led', default={})
         self.led_engine = LEDEngine(
             pin=led_cfg.get('pin', 21),
             count=led_cfg.get('count', 60),
@@ -216,7 +216,7 @@ class Application:
         self.mode_controller = ModeController(self.config, self.led_engine)
         
         # Initialize button service
-        btn_cfg = self.config.get('buttons', {})
+        btn_cfg = self.config.get('buttons', default={})
         self.button_service = ButtonService(
             btn1_pin=btn_cfg.get('btn1_pin', 20),
             btn2_pin=btn_cfg.get('btn2_pin', 22),
@@ -226,7 +226,7 @@ class Application:
         logger.info("Button service initialized")
         
         # Initialize Wi-Fi service
-        wifi_cfg = self.config.get('wifi', {})
+        wifi_cfg = self.config.get('wifi', default={})
         self.wifi_service = WiFiService(
             ap_ssid=wifi_cfg.get('ap_ssid', 'BikeLights-Setup')
         )
