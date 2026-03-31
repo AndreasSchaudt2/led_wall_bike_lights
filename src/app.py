@@ -189,6 +189,8 @@ class Application:
         self.button_service = None
         self.wifi_service = None
         self.web_server = None
+        self.web_thread = None
+        self.ap_mode_active = False
         
         try:
             self._initialize()
@@ -261,7 +263,27 @@ class Application:
     def on_btn2_long(self):
         """Button 2 long press: enter AP setup mode."""
         logger.info("Button 2 long press - entering AP mode")
-        # TODO: implement AP mode entry
+        if self.ap_mode_active:
+            logger.info("AP mode already active")
+            return
+
+        ok = self.wifi_service.enter_ap_mode()
+        if not ok:
+            logger.error("Failed to activate AP mode")
+            return
+
+        self.ap_mode_active = True
+        logger.info("AP mode active")
+
+        # Start setup web server in background.
+        if self.web_thread is None or not self.web_thread.is_alive():
+            self.web_thread = threading.Thread(
+                target=self.web_server.start,
+                daemon=True,
+                name="SetupWebServer"
+            )
+            self.web_thread.start()
+            logger.info("Setup web server started")
     
     def run(self):
         """Main event loop."""

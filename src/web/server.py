@@ -104,13 +104,15 @@ class WebServer:
         
         try:
             logger.info(f"Starting web server on 0.0.0.0:{self.port}")
-            self.app.run(host='0.0.0.0', port=self.port, debug=False)
             self.is_running = True
+            self.app.run(host='0.0.0.0', port=self.port, debug=False, use_reloader=False)
             return True
         
         except Exception as e:
             logger.error(f"Failed to start web server: {e}")
             return False
+        finally:
+            self.is_running = False
     
     def stop(self) -> None:
         """Stop web server."""
