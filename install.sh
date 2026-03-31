@@ -39,8 +39,53 @@ apt-get install -y \
   || { echo -e "${RED}Failed to install system packages${NC}"; exit 1; }
 
 echo -e "${YELLOW}[2b/8] Installing wifi-connect (proven provisioning service)...${NC}"
-bash <(curl -L https://github.com/balena-io/wifi-connect/raw/master/scripts/raspbian-install.sh) || \
-  { echo -e "${RED}wifi-connect install failed. Provisioning is wifi-connect only.${NC}"; exit 1; }
+WFC_VERSION="v4.11.84"
+WFC_BASE_URL="https://github.com/balena-os/wifi-connect/releases/download/${WFC_VERSION}"
+WFC_ARCH="$(uname -m)"
+
+case "$WFC_ARCH" in
+  armv7l)
+    WFC_ASSET="wifi-connect-armv7-unknown-linux-gnueabihf.tar.gz"
+    ;;
+  aarch64)
+    WFC_ASSET="wifi-connect-aarch64-unknown-linux-gnu.tar.gz"
+    ;;
+  *)
+    echo -e "${RED}Unsupported architecture for wifi-connect: ${WFC_ARCH}${NC}"
+    exit 1
+    ;;
+esac
+
+WFC_TMP_DIR="$(mktemp -d)"
+echo "Downloading ${WFC_ASSET}..."
+curl -fL "${WFC_BASE_URL}/${WFC_ASSET}" | tar -xz -C "$WFC_TMP_DIR"
+echo "Downloading wifi-connect UI..."
+curl -fL "${WFC_BASE_URL}/wifi-connect-ui.tar.gz" | tar -xz -C "$WFC_TMP_DIR"
+
+install -m 0755 "$WFC_TMP_DIR/wifi-connect" /usr/local/bin/wifi-connect
+mkdir -p /usr/local/share/wifi-connect
+rm -rf /usr/local/share/wifi-connect/ui
+mv "$WFC_TMP_DIR/ui" /usr/local/share/wifi-connect/ui
+rm -rf "$WFC_TMP_DIR"
+
+cat > /etc/systemd/system/wifi-connect.service <<'WFC_EOF'
+[Unit]
+Description=WiFi Connect provisioning portal
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/wifi-connect
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+WFC_EOF
+
+systemctl daemon-reload
+echo "wifi-connect installed: $(/usr/local/bin/wifi-connect --version || echo unknown-version)"
 
 echo -e "${YELLOW}[3/8] Setting up NetworkManager (disabling old networking)...${NC}"
 # On Raspberry Pi OS Bookworm, dhcpcd is still the default Wi-Fi manager.
