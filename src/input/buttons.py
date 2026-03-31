@@ -43,6 +43,10 @@ class Button:
         self.is_pressed = False
         self.press_time = 0
         self.last_event_time = 0
+        self.gpio = None
+        self.using_polling = False
+        self.poll_thread = None
+        self.stop_polling = False
         
         logger.info(f"Button {name} initialized on GPIO {pin}")
         self._initialize_gpio()
@@ -51,14 +55,22 @@ class Button:
         """Initialize GPIO for button input."""
         try:
             import RPi.GPIO as GPIO
+            self.gpio = GPIO
             GPIO.setmode(GPIO.BCM)
             GPIO.setup(self.pin, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-            
-            # Add event detection with callback
-            GPIO.add_event_detect(self.pin, GPIO.FALLING, 
-                                 callback=self._on_gpio_change, 
-                                 bouncetime=self.debounce_ms)
-            logger.info(f"GPIO {self.pin} event detection enabled")
+
+            try:
+                # Use BOTH edges so we can correctly detect press and release.
+                GPIO.add_event_detect(
+                    self.pin,
+                    GPIO.BOTH,
+                    callback=self._on_gpio_change,
+                    bouncetime=self.debounce_ms
+                )
+                logger.info(f"GPIO {self.pin} event detection enabled")
+            except Exception as e:
+                logger.warning(f"GPIO edge detection unavailable on pin {self.pin}: {e}; using polling fallback")
+                self._start_polling()
         except ImportError:
             logger.warning("RPi.GPIO not available, running in mock mode")
         except Exception as e:
@@ -66,13 +78,19 @@ class Button:
     
     def _on_gpio_change(self, channel: int) -> None:
         """GPIO change callback."""
+        if self.gpio is None:
+            return
+
         current_time = time.time() * 1000  # Convert to ms
-        
-        if not self.is_pressed:
+
+        # Active-low button: 0 = pressed, 1 = released.
+        pin_state = self.gpio.input(self.pin)
+
+        if pin_state == 0 and not self.is_pressed:
             # Button pressed
             self.is_pressed = True
             self.press_time = current_time
-        else:
+        elif pin_state == 1 and self.is_pressed:
             # Button released
             hold_time = current_time - self.press_time
             self.is_pressed = False
@@ -82,6 +100,30 @@ class Button:
                 self._emit_event(ButtonEvent.LONG_PRESS)
             else:
                 self._emit_event(ButtonEvent.SHORT_PRESS)
+
+    def _start_polling(self) -> None:
+        """Fallback polling loop when edge detection is not available."""
+        if self.gpio is None:
+            return
+
+        self.using_polling = True
+        self.stop_polling = False
+
+        def _poll_loop():
+            last_state = self.gpio.input(self.pin)
+            while not self.stop_polling:
+                try:
+                    state = self.gpio.input(self.pin)
+                    if state != last_state:
+                        self._on_gpio_change(self.pin)
+                        last_state = state
+                    time.sleep(0.01)
+                except Exception as e:
+                    logger.error(f"Polling error on {self.name}: {e}")
+                    time.sleep(0.05)
+
+        self.poll_thread = threading.Thread(target=_poll_loop, daemon=True)
+        self.poll_thread.start()
     
     def _emit_event(self, event: ButtonEvent) -> None:
         """Emit button event to registered callbacks."""
@@ -117,9 +159,15 @@ class Button:
     def cleanup(self) -> None:
         """Clean up GPIO resources."""
         try:
-            import RPi.GPIO as GPIO
-            GPIO.remove_event_detect(self.pin)
-            GPIO.cleanup(self.pin)
+            self.stop_polling = True
+            if self.poll_thread and self.poll_thread.is_alive():
+                self.poll_thread.join(timeout=1)
+
+            if self.gpio is not None:
+                if not self.using_polling:
+                    self.gpio.remove_event_detect(self.pin)
+                self.gpio.cleanup(self.pin)
+
             logger.info(f"Button {self.name} cleaned up")
         except Exception as e:
             logger.error(f"Error during button cleanup: {e}")
