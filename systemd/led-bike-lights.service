@@ -10,7 +10,7 @@ Type=simple
 User=root
 Group=root
 WorkingDirectory=/opt/led_bike_lights
-Environment="PATH=/opt/led_bike_lights/venv/bin"
+Environment="PATH=/opt/led_bike_lights/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 ExecStart=/opt/led_bike_lights/venv/bin/python3 /opt/led_bike_lights/src/app.py
 ExecReload=/bin/kill -HUP $MAINPID
 

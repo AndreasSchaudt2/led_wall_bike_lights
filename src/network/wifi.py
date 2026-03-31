@@ -4,6 +4,7 @@ Handles AP setup mode and STA client connection.
 """
 
 import logging
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -26,7 +27,13 @@ class WiFiService:
         """
         self.ap_ssid = ap_ssid
         self.is_ap_mode = False
+        self.nmcli_cmd = shutil.which("nmcli") or "/usr/bin/nmcli"
         logger.info("Wi-Fi service initialized")
+
+    def _run_nmcli(self, args, check: bool = False, text: bool = False, timeout: Optional[int] = None):
+        """Run nmcli with a stable absolute path in the systemd environment."""
+        cmd = [self.nmcli_cmd, *args]
+        return subprocess.run(cmd, check=check, capture_output=True, text=text, timeout=timeout)
     
     def enter_ap_mode(self) -> bool:
         """
@@ -39,23 +46,20 @@ class WiFiService:
             logger.info(f"Entering AP mode, SSID: {self.ap_ssid}")
             
             # Create AP connection profile
-            cmd = [
-                "nmcli", "con", "add", "type", "wifi", "ifname", "wlan0",
+            self._run_nmcli([
+                "con", "add", "type", "wifi", "ifname", "wlan0",
                 "con-name", "BikeLights-AP", "autoconnect", "no",
                 "ssid", self.ap_ssid
-            ]
-            subprocess.run(cmd, check=True, capture_output=True)
+            ], check=True)
             
             # Set to AP mode
-            cmd = [
-                "nmcli", "con", "modify", "BikeLights-AP",
+            self._run_nmcli([
+                "con", "modify", "BikeLights-AP",
                 "802-11-wireless.mode", "ap"
-            ]
-            subprocess.run(cmd, check=True, capture_output=True)
+            ], check=True)
             
             # Activate AP
-            cmd = ["nmcli", "con", "up", "BikeLights-AP"]
-            subprocess.run(cmd, check=True, capture_output=True)
+            self._run_nmcli(["con", "up", "BikeLights-AP"], check=True)
             
             self.is_ap_mode = True
             logger.info("AP mode activated")
@@ -79,12 +83,10 @@ class WiFiService:
             logger.info("Exiting AP mode")
             
             # Disconnect AP
-            cmd = ["nmcli", "con", "down", "BikeLights-AP"]
-            subprocess.run(cmd, capture_output=True)
+            self._run_nmcli(["con", "down", "BikeLights-AP"])
             
             # Remove AP connection
-            cmd = ["nmcli", "con", "delete", "BikeLights-AP"]
-            subprocess.run(cmd, capture_output=True)
+            self._run_nmcli(["con", "delete", "BikeLights-AP"])
             
             self.is_ap_mode = False
             logger.info("AP mode deactivated")
@@ -109,11 +111,10 @@ class WiFiService:
             logger.info(f"Connecting to network: {ssid}")
             
             # Create connection
-            cmd = [
-                "nmcli", "dev", "wifi", "connect", ssid,
+            result = self._run_nmcli([
+                "dev", "wifi", "connect", ssid,
                 "password", password
-            ]
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            ], text=True, timeout=30)
             
             if result.returncode != 0:
                 logger.error(f"Connection failed: {result.stderr}")
@@ -145,10 +146,7 @@ class WiFiService:
             True if connected
         """
         try:
-            result = subprocess.run(
-                ["nmcli", "device", "status"],
-                capture_output=True, text=True
-            )
+            result = self._run_nmcli(["device", "status"], text=True)
             
             for line in result.stdout.split('\n'):
                 if 'wlan0' in line and 'connected' in line:
@@ -168,10 +166,7 @@ class WiFiService:
             Dict with connection info or None
         """
         try:
-            result = subprocess.run(
-                ["nmcli", "con", "show", "--active"],
-                capture_output=True, text=True
-            )
+            result = self._run_nmcli(["con", "show", "--active"], text=True)
             
             info = {}
             for line in result.stdout.split('\n'):
@@ -195,8 +190,7 @@ class WiFiService:
         """
         try:
             logger.info("Disconnecting from network")
-            cmd = ["nmcli", "device", "disconnect", "wlan0"]
-            subprocess.run(cmd, check=True, capture_output=True)
+            self._run_nmcli(["device", "disconnect", "wlan0"], check=True)
             return True
         
         except Exception as e:
