@@ -28,12 +28,53 @@ class WiFiService:
         self.ap_ssid = ap_ssid
         self.is_ap_mode = False
         self.nmcli_cmd = shutil.which("nmcli") or "/usr/bin/nmcli"
+        self.systemctl_cmd = shutil.which("systemctl") or "/bin/systemctl"
         logger.info("Wi-Fi service initialized")
 
     def _run_nmcli(self, args, check: bool = False, text: bool = False, timeout: Optional[int] = None):
         """Run nmcli with a stable absolute path in the systemd environment."""
         cmd = [self.nmcli_cmd, *args]
         return subprocess.run(cmd, check=check, capture_output=True, text=text, timeout=timeout)
+
+    def _run_systemctl(self, args, check: bool = False):
+        """Run systemctl with a stable absolute path."""
+        cmd = [self.systemctl_cmd, *args]
+        return subprocess.run(cmd, check=check, capture_output=True, text=True)
+
+    def has_wifi_connect(self) -> bool:
+        """Return True if wifi-connect service exists on this host."""
+        try:
+            result = self._run_systemctl(["status", "wifi-connect.service"])
+            return result.returncode in (0, 3)  # active/inactive but known unit
+        except Exception:
+            return False
+
+    def start_wifi_connect(self) -> bool:
+        """Start proven provisioning service (balena wifi-connect)."""
+        try:
+            logger.info("Starting wifi-connect provisioning service")
+            self._run_systemctl(["start", "wifi-connect.service"], check=True)
+            self.is_ap_mode = True
+            return True
+        except subprocess.CalledProcessError as e:
+            logger.error(
+                "Failed to start wifi-connect service: rc=%s stdout=%s stderr=%s",
+                e.returncode,
+                (e.stdout or "").strip(),
+                (e.stderr or "").strip(),
+            )
+            return False
+        except Exception as e:
+            logger.error(f"Error starting wifi-connect service: {e}")
+            return False
+
+    def stop_wifi_connect(self) -> bool:
+        """Stop provisioning service if running."""
+        try:
+            self._run_systemctl(["stop", "wifi-connect.service"])
+            return True
+        except Exception:
+            return False
     
     def enter_ap_mode(self) -> bool:
         """

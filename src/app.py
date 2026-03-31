@@ -267,23 +267,16 @@ class Application:
             logger.info("AP mode already active")
             return
 
-        ok = self.wifi_service.enter_ap_mode()
-        if not ok:
-            logger.error("Failed to activate AP mode")
+        if not self.wifi_service.has_wifi_connect():
+            logger.error("wifi-connect service is not installed")
+            return
+
+        if not self.wifi_service.start_wifi_connect():
+            logger.error("Failed to start wifi-connect provisioning mode")
             return
 
         self.ap_mode_active = True
-        logger.info("AP mode active")
-
-        # Start setup web server in background.
-        if self.web_thread is None or not self.web_thread.is_alive():
-            self.web_thread = threading.Thread(
-                target=self.web_server.start,
-                daemon=True,
-                name="SetupWebServer"
-            )
-            self.web_thread.start()
-            logger.info("Setup web server started")
+        logger.info("wifi-connect provisioning mode active")
     
     def run(self):
         """Main event loop."""

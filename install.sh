@@ -38,6 +38,10 @@ apt-get install -y \
   network-manager \
   || { echo -e "${RED}Failed to install system packages${NC}"; exit 1; }
 
+echo -e "${YELLOW}[2b/8] Installing wifi-connect (proven provisioning service)...${NC}"
+bash <(curl -L https://github.com/balena-io/wifi-connect/raw/master/scripts/raspbian-install.sh) || \
+  { echo -e "${RED}wifi-connect install failed. Provisioning is wifi-connect only.${NC}"; exit 1; }
+
 echo -e "${YELLOW}[3/8] Setting up NetworkManager (disabling old networking)...${NC}"
 # On Raspberry Pi OS Bookworm, dhcpcd is still the default Wi-Fi manager.
 # We must stop it BEFORE disabling to avoid leaving wlan0 in a broken state.
@@ -158,7 +162,15 @@ for grp in gpio spi i2c; do
 done
 
 echo -e "${YELLOW}[6/8] Installing systemd service...${NC}"
-cat > /etc/systemd/system/led-bike-lights.service <<EOF
+SERVICE_SRC="$SCRIPT_DIR/systemd/led-bike-lights.service"
+SERVICE_DST="/etc/systemd/system/led-bike-lights.service"
+
+if [ -f "$SERVICE_SRC" ]; then
+  echo "Installing service unit from repository: $SERVICE_SRC"
+  cp "$SERVICE_SRC" "$SERVICE_DST"
+else
+  echo "Repository service file not found, generating default unit"
+  cat > "$SERVICE_DST" <<EOF
 [Unit]
 Description=LED Bike Wall Lights Controller
 After=network-online.target
@@ -180,6 +192,7 @@ StandardError=journal
 [Install]
 WantedBy=multi-user.target
 EOF
+fi
 
 # Do NOT chown service unit (must be root-owned)
 systemctl daemon-reload
@@ -188,6 +201,7 @@ systemctl enable led-bike-lights.service
 echo -e "${YELLOW}[7/8] Setting permissions...${NC}"
 chown -R "${ACTUAL_USER}:${ACTUAL_USER}" "$INSTALL_DIR"
 chmod +x "$INSTALL_DIR/src/app.py" 2>/dev/null || true
+chmod +x "$SCRIPT_DIR/start-service.sh" 2>/dev/null || true
 
 echo -e "${YELLOW}[8/8] Creating necessary runtime directories...${NC}"
 mkdir -p /run/led_bike_lights
@@ -217,4 +231,7 @@ echo ""
 echo "4. Once working, enable auto-start:"
 echo "   sudo systemctl enable led-bike-lights.service"
 echo "   sudo systemctl start led-bike-lights.service"
+echo ""
+echo "5. Fast redeploy + restart helper:"
+echo "   sudo bash $SCRIPT_DIR/start-service.sh"
 echo ""
