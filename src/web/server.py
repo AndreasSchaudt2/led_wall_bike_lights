@@ -72,12 +72,12 @@ class WebServer:
         def connect():
             data = request.get_json()
             ssid = data.get('ssid')
-            password = data.get('password')
+            password = data.get('password', '')
             
             if not ssid:
                 return jsonify({'error': 'SSID required'}), 400
             
-            success = self.wifi_service.connect_to_network(ssid, password)
+            success, message = self.wifi_service.connect_result(ssid, password)
             
             if success:
                 # Save credentials to config
@@ -87,7 +87,7 @@ class WebServer:
                 
                 return jsonify({'success': True, 'message': 'Connected'})
             else:
-                return jsonify({'success': False, 'error': 'Connection failed'}), 500
+                return jsonify({'success': False, 'error': message}), 500
         
         logger.info("Flask app configured")
     

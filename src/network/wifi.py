@@ -130,15 +130,27 @@ class WiFiService:
         """
         try:
             logger.info(f"Connecting to network: {ssid}")
-            
-            # Create connection
-            result = self._run_nmcli([
-                "dev", "wifi", "connect", ssid,
-                "password", password
-            ], text=True, timeout=30)
+
+            # Leave AP mode before attempting station/client connection.
+            if self.is_ap_mode:
+                self.exit_ap_mode()
+
+            # Remove stale profile for the target SSID so security settings are rebuilt cleanly.
+            self._run_nmcli(["con", "delete", ssid])
+
+            if password:
+                result = self._run_nmcli([
+                    "dev", "wifi", "connect", ssid,
+                    "password", password
+                ], text=True, timeout=30)
+            else:
+                result = self._run_nmcli([
+                    "dev", "wifi", "connect", ssid
+                ], text=True, timeout=30)
             
             if result.returncode != 0:
-                logger.error(f"Connection failed: {result.stderr}")
+                error_text = (result.stderr or result.stdout or "unknown error").strip()
+                logger.error(f"Connection failed: {error_text}")
                 return False
             
             # Wait for IP assignment
@@ -217,3 +229,44 @@ class WiFiService:
         except Exception as e:
             logger.error(f"Error disconnecting: {e}")
             return False
+
+    def connect_result(self, ssid: str, password: str) -> tuple[bool, str]:
+        """Connect and return both success state and a human-readable message."""
+        try:
+            logger.info(f"Connecting to network: {ssid}")
+
+            if self.is_ap_mode:
+                self.exit_ap_mode()
+
+            self._run_nmcli(["con", "delete", ssid])
+
+            if password:
+                result = self._run_nmcli([
+                    "dev", "wifi", "connect", ssid,
+                    "password", password
+                ], text=True, timeout=30)
+            else:
+                result = self._run_nmcli([
+                    "dev", "wifi", "connect", ssid
+                ], text=True, timeout=30)
+
+            if result.returncode != 0:
+                error_text = (result.stderr or result.stdout or "unknown error").strip()
+                logger.error(f"Connection failed: {error_text}")
+                return False, error_text
+
+            time.sleep(2)
+
+            if self.is_connected():
+                logger.info("Connected successfully")
+                return True, "Connected successfully"
+
+            logger.error("Connection verification failed")
+            return False, "Connection verification failed"
+
+        except subprocess.TimeoutExpired:
+            logger.error("Connection attempt timed out")
+            return False, "Connection attempt timed out"
+        except Exception as e:
+            logger.error(f"Error connecting to network: {e}")
+            return False, str(e)
