@@ -73,11 +73,26 @@ cd "$INSTALL_DIR"
 # Copy source code if running from source directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -d "$SCRIPT_DIR/src" ]; then
-  echo "Copying source from $SCRIPT_DIR..."
-  cp -r "$SCRIPT_DIR/src" "$INSTALL_DIR/"
+  SRC_PATH="$(readlink -f "$SCRIPT_DIR/src")"
+  DST_PATH="$(readlink -f "$INSTALL_DIR/src")"
+
+  if [ "$SRC_PATH" = "$DST_PATH" ]; then
+    echo "Source already in $INSTALL_DIR/src, skipping copy."
+  else
+    echo "Copying source from $SCRIPT_DIR..."
+    rm -rf "$INSTALL_DIR/src"
+    cp -r "$SCRIPT_DIR/src" "$INSTALL_DIR/"
+  fi
+
   if [ -f "$SCRIPT_DIR/config.yaml" ]; then
-    cp "$SCRIPT_DIR/config.yaml" "$INSTALL_DIR/"
-    echo "config.yaml copied."
+    CONFIG_SRC="$(readlink -f "$SCRIPT_DIR/config.yaml")"
+    CONFIG_DST="$(readlink -f "$INSTALL_DIR/config.yaml" 2>/dev/null || true)"
+    if [ "$CONFIG_SRC" = "$CONFIG_DST" ]; then
+      echo "config.yaml already in place, skipping copy."
+    else
+      cp "$SCRIPT_DIR/config.yaml" "$INSTALL_DIR/"
+      echo "config.yaml copied."
+    fi
   else
     echo -e "${YELLOW}Warning: config.yaml not found in $SCRIPT_DIR — copy it manually:${NC}"
     echo "  sudo cp <path>/config.yaml $INSTALL_DIR/"
