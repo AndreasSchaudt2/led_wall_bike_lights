@@ -56,32 +56,51 @@ case "$WFC_ARCH" in
     ;;
 esac
 
-WFC_TMP_DIR="$(mktemp -d)"
+WFC_BIN_TMP_DIR="$(mktemp -d)"
+WFC_UI_TMP_DIR="$(mktemp -d)"
 echo "Downloading ${WFC_ASSET}..."
-curl -fL "${WFC_BASE_URL}/${WFC_ASSET}" | tar -xz -C "$WFC_TMP_DIR"
+curl -fL "${WFC_BASE_URL}/${WFC_ASSET}" | tar -xz -C "$WFC_BIN_TMP_DIR"
 echo "Downloading wifi-connect UI..."
-curl -fL "${WFC_BASE_URL}/wifi-connect-ui.tar.gz" | tar -xz -C "$WFC_TMP_DIR"
+curl -fL "${WFC_BASE_URL}/wifi-connect-ui.tar.gz" | tar -xz -C "$WFC_UI_TMP_DIR"
 
-install -m 0755 "$WFC_TMP_DIR/wifi-connect" /usr/local/bin/wifi-connect
+WFC_BIN_PATH="$WFC_BIN_TMP_DIR/wifi-connect"
+if [ ! -f "$WFC_BIN_PATH" ]; then
+  WFC_BIN_PATH="$(find "$WFC_BIN_TMP_DIR" -maxdepth 3 -type f -name wifi-connect | head -n1)"
+fi
+
+if [ -z "$WFC_BIN_PATH" ] || [ ! -f "$WFC_BIN_PATH" ]; then
+  echo -e "${RED}Could not locate extracted wifi-connect binary${NC}"
+  exit 1
+fi
+
+install -m 0755 "$WFC_BIN_PATH" /usr/local/bin/wifi-connect
 mkdir -p /usr/local/share/wifi-connect
 rm -rf /usr/local/share/wifi-connect/ui
+mkdir -p /usr/local/share/wifi-connect/ui
 
 # UI archive layout changed over releases; detect extracted directory robustly.
-if [ -d "$WFC_TMP_DIR/ui" ]; then
-  UI_SRC_DIR="$WFC_TMP_DIR/ui"
-elif [ -d "$WFC_TMP_DIR/wifi-connect-ui" ]; then
-  UI_SRC_DIR="$WFC_TMP_DIR/wifi-connect-ui"
+if [ -d "$WFC_UI_TMP_DIR/ui" ]; then
+  UI_SRC_DIR="$WFC_UI_TMP_DIR/ui"
+elif [ -d "$WFC_UI_TMP_DIR/wifi-connect-ui" ]; then
+  UI_SRC_DIR="$WFC_UI_TMP_DIR/wifi-connect-ui"
+elif [ -f "$WFC_UI_TMP_DIR/index.html" ]; then
+  # Flat archive layout with files extracted at root.
+  UI_SRC_DIR="$WFC_UI_TMP_DIR"
 else
-  UI_SRC_DIR="$(find "$WFC_TMP_DIR" -maxdepth 2 -type d \( -name ui -o -name wifi-connect-ui \) | head -n1)"
+  UI_SRC_DIR="$(find "$WFC_UI_TMP_DIR" -maxdepth 4 -type d \( -name ui -o -name wifi-connect-ui \) | head -n1)"
+  if [ -z "$UI_SRC_DIR" ]; then
+    UI_SRC_DIR="$(find "$WFC_UI_TMP_DIR" -maxdepth 4 -type f -name index.html -printf '%h\n' | head -n1)"
+  fi
 fi
 
 if [ -z "$UI_SRC_DIR" ] || [ ! -d "$UI_SRC_DIR" ]; then
   echo -e "${RED}Could not locate extracted wifi-connect UI directory${NC}"
+  find "$WFC_UI_TMP_DIR" -maxdepth 4 -print
   exit 1
 fi
 
-mv "$UI_SRC_DIR" /usr/local/share/wifi-connect/ui
-rm -rf "$WFC_TMP_DIR"
+cp -a "$UI_SRC_DIR"/. /usr/local/share/wifi-connect/ui/
+rm -rf "$WFC_BIN_TMP_DIR" "$WFC_UI_TMP_DIR"
 
 cat > /etc/systemd/system/wifi-connect.service <<'WFC_EOF'
 [Unit]
