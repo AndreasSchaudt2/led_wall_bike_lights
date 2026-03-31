@@ -65,7 +65,22 @@ curl -fL "${WFC_BASE_URL}/wifi-connect-ui.tar.gz" | tar -xz -C "$WFC_TMP_DIR"
 install -m 0755 "$WFC_TMP_DIR/wifi-connect" /usr/local/bin/wifi-connect
 mkdir -p /usr/local/share/wifi-connect
 rm -rf /usr/local/share/wifi-connect/ui
-mv "$WFC_TMP_DIR/ui" /usr/local/share/wifi-connect/ui
+
+# UI archive layout changed over releases; detect extracted directory robustly.
+if [ -d "$WFC_TMP_DIR/ui" ]; then
+  UI_SRC_DIR="$WFC_TMP_DIR/ui"
+elif [ -d "$WFC_TMP_DIR/wifi-connect-ui" ]; then
+  UI_SRC_DIR="$WFC_TMP_DIR/wifi-connect-ui"
+else
+  UI_SRC_DIR="$(find "$WFC_TMP_DIR" -maxdepth 2 -type d \( -name ui -o -name wifi-connect-ui \) | head -n1)"
+fi
+
+if [ -z "$UI_SRC_DIR" ] || [ ! -d "$UI_SRC_DIR" ]; then
+  echo -e "${RED}Could not locate extracted wifi-connect UI directory${NC}"
+  exit 1
+fi
+
+mv "$UI_SRC_DIR" /usr/local/share/wifi-connect/ui
 rm -rf "$WFC_TMP_DIR"
 
 cat > /etc/systemd/system/wifi-connect.service <<'WFC_EOF'
