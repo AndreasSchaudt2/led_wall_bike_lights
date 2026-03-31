@@ -166,8 +166,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=$ACTUAL_USER
-Group=$ACTUAL_USER
+# NeoPixel (rpi_ws281x) needs root for DMA/PWM access.
+User=root
+Group=root
 WorkingDirectory=/opt/led_bike_lights
 Environment="PATH=/opt/led_bike_lights/venv/bin"
 ExecStart=/opt/led_bike_lights/venv/bin/python3 /opt/led_bike_lights/src/app.py
