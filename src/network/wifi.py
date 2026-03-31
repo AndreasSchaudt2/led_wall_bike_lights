@@ -44,6 +44,11 @@ class WiFiService:
         """
         try:
             logger.info(f"Entering AP mode, SSID: {self.ap_ssid}")
+
+            # Remove any stale AP profile and disconnect wlan0 from current network.
+            self._run_nmcli(["con", "down", "BikeLights-AP"])
+            self._run_nmcli(["con", "delete", "BikeLights-AP"])
+            self._run_nmcli(["device", "disconnect", "wlan0"])
             
             # Create AP connection profile
             self._run_nmcli([
@@ -57,6 +62,15 @@ class WiFiService:
                 "con", "modify", "BikeLights-AP",
                 "802-11-wireless.mode", "ap"
             ], check=True)
+
+            # Shared IP mode is required for a functional setup hotspot.
+            self._run_nmcli([
+                "con", "modify", "BikeLights-AP",
+                "ipv4.method", "shared",
+                "ipv6.method", "disabled",
+                "connection.autoconnect", "no",
+                "802-11-wireless.band", "bg"
+            ], check=True)
             
             # Activate AP
             self._run_nmcli(["con", "up", "BikeLights-AP"], check=True)
@@ -66,7 +80,14 @@ class WiFiService:
             return True
         
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to enter AP mode: {e}")
+            stderr = e.stderr.decode() if isinstance(e.stderr, bytes) else (e.stderr or "")
+            stdout = e.stdout.decode() if isinstance(e.stdout, bytes) else (e.stdout or "")
+            logger.error(
+                "Failed to enter AP mode: returncode=%s stdout=%s stderr=%s",
+                e.returncode,
+                stdout.strip(),
+                stderr.strip(),
+            )
             return False
         except Exception as e:
             logger.error(f"Error setting up AP mode: {e}")
