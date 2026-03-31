@@ -29,21 +29,41 @@ apt-get update || true
 apt-get upgrade -y || true
 
 echo -e "${YELLOW}[2/8] Installing Python and dependencies...${NC}"
+# Note: libjasper-dev and libjasper1 are not available on recent Raspberry Pi OS — removed.
+# libwebp6/libtiff5 replaced by libwebp7/libtiff6 on bookworm — use generic names.
 apt-get install -y \
   python3 python3-pip python3-venv \
   git curl wget \
   gcc python3-dev \
-  libatlas-base-dev libjasper-dev libtiff5 libjasper1 libharfbuzz0b libwebp6 libtiff5 \
-  NetworkManager \
+  libatlas-base-dev \
+  network-manager \
   || { echo -e "${RED}Failed to install system packages${NC}"; exit 1; }
 
 echo -e "${YELLOW}[3/8] Setting up NetworkManager (disabling old networking)...${NC}"
-systemctl disable dhcpcd.service 2>/dev/null || true
+# On Raspberry Pi OS Bookworm, dhcpcd is still the default Wi-Fi manager.
+# We must stop it BEFORE disabling to avoid leaving wlan0 in a broken state.
 systemctl stop dhcpcd.service 2>/dev/null || true
-systemctl disable networking.service 2>/dev/null || true
+systemctl disable dhcpcd.service 2>/dev/null || true
 systemctl stop networking.service 2>/dev/null || true
+systemctl disable networking.service 2>/dev/null || true
+
+# Ensure NetworkManager manages wlan0 (not unmanaged)
+mkdir -p /etc/NetworkManager/conf.d
+cat > /etc/NetworkManager/conf.d/99-unmanaged-devices.conf <<'NMEOF'
+[keyfile]
+unmanaged-devices=none
+NMEOF
+
+# Make sure wlan0 is not listed as unmanaged in any interface file
+sed -i '/wlan0/d' /etc/network/interfaces 2>/dev/null || true
+
 systemctl enable NetworkManager
 systemctl restart NetworkManager
+sleep 3
+
+# Bring up wlan0 explicitly
+nmcli radio wifi on 2>/dev/null || true
+ip link set wlan0 up 2>/dev/null || true
 sleep 2
 
 echo -e "${YELLOW}[4/8] Creating application directory and Python venv...${NC}"
@@ -52,10 +72,11 @@ mkdir -p "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 
 # Copy source code if running from source directory
-if [ -d "$(pwd -P)/../src" ]; then
-  echo "Copying source from local directory..."
-  cp -r "$(pwd -P)/../src" .
-  cp "$(pwd -P)/../config.yaml" .
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -d "$SCRIPT_DIR/src" ]; then
+  echo "Copying source from $SCRIPT_DIR..."
+  cp -r "$SCRIPT_DIR/src" "$INSTALL_DIR/"
+  cp "$SCRIPT_DIR/config.yaml" "$INSTALL_DIR/" 2>/dev/null || true
 else
   echo "Note: Copy your src/ folder and config.yaml to $INSTALL_DIR"
 fi
@@ -72,18 +93,31 @@ if [ ! -d "venv" ]; then
   deactivate
 fi
 
-echo -e "${YELLOW}[5/8] Enabling SPI and I2C (if needed for LED drivers)...${NC}"
-if ! grep -q "^dtparam=spi=on" /boot/firmware/config.txt 2>/dev/null; then
-  echo "dtparam=spi=on" >> /boot/firmware/config.txt
-fi
-if ! grep -q "^dtparam=i2c_arm=on" /boot/firmware/config.txt 2>/dev/null; then
-  echo "dtparam=i2c_arm=on" >> /boot/firmware/config.txt
+echo -e "${YELLOW}[5/8] Enabling PWM for LED data pin (GPIO 21)...${NC}"
+# Pi Zero 2 uses /boot/firmware/config.txt on Bookworm
+BOOT_CONFIG="/boot/firmware/config.txt"
+if [ ! -f "$BOOT_CONFIG" ]; then
+  BOOT_CONFIG="/boot/config.txt"  # Fallback for older OS
 fi
 
-# Allow GPIO access
-usermod -aG gpio pi 2>/dev/null || true
-usermod -aG spi pi 2>/dev/null || true
-usermod -aG i2c pi 2>/dev/null || true
+if ! grep -q "^dtparam=spi=on" "$BOOT_CONFIG" 2>/dev/null; then
+  echo "dtparam=spi=on" >> "$BOOT_CONFIG"
+fi
+if ! grep -q "^dtparam=i2c_arm=on" "$BOOT_CONFIG" 2>/dev/null; then
+  echo "dtparam=i2c_arm=on" >> "$BOOT_CONFIG"
+fi
+# Enable audio off / PWM needed for WS281x on GPIO21
+if ! grep -q "^dtparam=audio=off" "$BOOT_CONFIG" 2>/dev/null; then
+  echo "dtparam=audio=off" >> "$BOOT_CONFIG"
+  echo "# Disable onboard audio to free PWM for WS281x LEDs" >> "$BOOT_CONFIG"
+fi
+
+# Allow GPIO access — also add the actual logged-in user if different from 'pi'
+SUDO_USER_HOME=$(getent passwd "${SUDO_USER:-pi}" | cut -d: -f6)
+ACTUAL_USER="${SUDO_USER:-pi}"
+for grp in gpio spi i2c; do
+  getent group "$grp" &>/dev/null && usermod -aG "$grp" "$ACTUAL_USER" || true
+done
 
 echo -e "${YELLOW}[6/8] Installing systemd service...${NC}"
 cat > /etc/systemd/system/led-bike-lights.service <<'EOF'
@@ -97,7 +131,7 @@ Type=simple
 User=pi
 WorkingDirectory=/opt/led_bike_lights
 Environment="PATH=/opt/led_bike_lights/venv/bin"
-ExecStart=/opt/led_bike_lights/venv/bin/python3 /opt/led_bike_lights/app.py
+ExecStart=/opt/led_bike_lights/venv/bin/python3 /opt/led_bike_lights/src/app.py
 Restart=on-failure
 RestartSec=5
 StandardOutput=journal
@@ -107,20 +141,25 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 
-chown pi:pi /etc/systemd/system/led-bike-lights.service
+# Do NOT chown service unit (must be root-owned)
 systemctl daemon-reload
 systemctl enable led-bike-lights.service
 
 echo -e "${YELLOW}[7/8] Setting permissions...${NC}"
-chown -R pi:pi "$INSTALL_DIR"
-chmod +x "$INSTALL_DIR/app.py" 2>/dev/null || true
+chown -R "${ACTUAL_USER}:${ACTUAL_USER}" "$INSTALL_DIR"
+chmod +x "$INSTALL_DIR/src/app.py" 2>/dev/null || true
 
 echo -e "${YELLOW}[8/8] Creating necessary runtime directories...${NC}"
 mkdir -p /run/led_bike_lights
-chown pi:pi /run/led_bike_lights
+chown "${ACTUAL_USER}:${ACTUAL_USER}" /run/led_bike_lights
 
-# Enable Wi-Fi regulatory domain
+# Enable Wi-Fi regulatory domain (adjust country code if not DE)
 raspi-config nonint do_wifi_country DE 2>/dev/null || true
+
+# Verify Wi-Fi is up before finishing
+echo "Verifying Wi-Fi state..."
+nmcli device status || true
+ip -br link show wlan0 || true
 
 echo -e "${GREEN}=== Installation Complete ===${NC}"
 echo ""
