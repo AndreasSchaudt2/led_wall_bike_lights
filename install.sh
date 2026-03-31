@@ -75,9 +75,17 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -d "$SCRIPT_DIR/src" ]; then
   echo "Copying source from $SCRIPT_DIR..."
   cp -r "$SCRIPT_DIR/src" "$INSTALL_DIR/"
-  cp "$SCRIPT_DIR/config.yaml" "$INSTALL_DIR/" 2>/dev/null || true
+  if [ -f "$SCRIPT_DIR/config.yaml" ]; then
+    cp "$SCRIPT_DIR/config.yaml" "$INSTALL_DIR/"
+    echo "config.yaml copied."
+  else
+    echo -e "${YELLOW}Warning: config.yaml not found in $SCRIPT_DIR — copy it manually:${NC}"
+    echo "  sudo cp <path>/config.yaml $INSTALL_DIR/"
+  fi
 else
-  echo "Note: Copy your src/ folder and config.yaml to $INSTALL_DIR"
+  echo -e "${YELLOW}Note: src/ not found. Copy manually:${NC}"
+  echo "  sudo cp -r <repo>/src $INSTALL_DIR/"
+  echo "  sudo cp <repo>/config.yaml $INSTALL_DIR/"
 fi
 
 # Create Python virtual environment

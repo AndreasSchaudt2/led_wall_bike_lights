@@ -1,0 +1,67 @@
+# ============================================================
+# Bike Wall LED Lights — Configuration Template
+# Copy this file to config.yaml and adjust to your setup.
+# config.yaml is gitignored (it stores WiFi credentials).
+# ============================================================
+
+# --- LED strip -------------------------------------------------
+led:
+  pin: 21          # GPIO data pin for current test setup
+  count: 20        # Temporary test strip length
+  brightness: 20   # Lower brightness for test without external PSU
+
+# --- Physical buttons ------------------------------------------
+buttons:
+  btn1_pin: 20     # GPIO BCM number — short press → next mode
+  btn2_pin: 22     # GPIO BCM number — hold → enter WiFi setup mode
+  long_press_ms: 3000
+
+# --- WiFi -------------------------------------------------------
+# Leave ssid empty (or delete config.yaml) to boot in AP setup mode.
+wifi:
+  ssid: ""
+  password: ""
+  ap_ssid: "BikeLights-Setup"   # SSID advertised in setup mode
+
+# --- Light modes -----------------------------------------------
+modes:
+  startup_mode: "static"   # off | static | breathing | rainbow | kickr
+  static:
+    color: [255, 80, 0]    # RGB — orange, adjust to match your bike
+  breathing:
+    color: [255, 80, 0]
+    speed: 1.5             # Duration of one full pulse cycle (seconds)
+  rainbow:
+    speed: 0.05            # Seconds per animation step (lower = faster)
+
+# --- Wahoo KICKR Core power zones ------------------------------
+kickr:
+  enabled: true
+  ftp: 250                 # Your Functional Threshold Power (watts)
+  device_name: ""          # Exact BLE name to skip auto-discovery,
+                           # e.g. "KICKR CORE A1B2" — leave empty to
+                           # auto-discover any KICKR / Wahoo device.
+  zones:
+    - name: Z1_Recovery
+      pct_ftp_max: 55
+      color: [0, 0, 255]       # Blue
+
+    - name: Z2_Endurance
+      pct_ftp_max: 75
+      color: [0, 200, 0]       # Green
+
+    - name: Z3_Tempo
+      pct_ftp_max: 90
+      color: [255, 255, 0]     # Yellow
+
+    - name: Z4_Threshold
+      pct_ftp_max: 105
+      color: [255, 128, 0]     # Orange
+
+    - name: Z5_VO2Max
+      pct_ftp_max: 120
+      color: [255, 0, 0]       # Red
+
+    - name: Z6_Anaerobic
+      pct_ftp_max: 999
+      color: [180, 0, 255]     # Purple

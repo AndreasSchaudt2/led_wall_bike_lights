@@ -1,5 +1,4 @@
 # Project root
-config*.yaml
 venv/
 __pycache__/
 *.pyc
